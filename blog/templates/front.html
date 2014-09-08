@@ -1,15 +1,12 @@
-<!DOCTYPE HTML>
-<html>
-    <head>
-        <link type="text/css" rel="stylesheet" href="/static/main.css" />
-        
-        <title>My Blog</title>
-    </head>
-    <body>
-        <a href="/art" class="main-title">
-    AsciiChan
-  </a>
-    
-        <p>Hello World!!<p>
-    </body>
-</html>
+{% extends "base.html" %}
+
+{% block content %}
+
+  {% for p in posts %}
+    <div class="container">
+        <div><h1>{{p.subject}}</h1></div>
+        <div><p>{{p.content}}</p></div>
+    </div>
+  {% endfor %}
+
+{% endblock %}
