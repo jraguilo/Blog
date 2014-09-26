@@ -3,13 +3,17 @@
 {% block content %}
 <div class="block-content">
 <form method="post">
-    <div class="form-group">
-        <label for="subject" class="control-label">Subject</label>
-        <input type="text" class="form-control" name="subject" value="{{subject}}">
+    <div class="row">
+        <div class="form-group col-md-3">
+            <label for="subject" class="control-label">Subject</label>
+            <input type="text" class="form-control" name="subject" value="{{subject}}">
+        </div>
     </div>
-    <div class="form-group">
-        <label for="content">Blog</label>
-        <textarea name="content" class="form-control" rows="10" value="{{content}}"></textarea>
+    <div class="row">
+        <div class="form-group col-md-3">
+            <label for="content">Blog</label>
+            <textarea name="content" class="form-control" rows="10" value="{{content}}"></textarea>
+        </div>
     </div>
     <div class="error">
         {{error}}

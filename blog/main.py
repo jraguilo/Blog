@@ -143,14 +143,16 @@ class Register(BlogHandler):
             u.put()
             
 class Login(BlogHandler):
-
+    def get(self):
+        self.render("register.html")
 class Logout(BlogHandler):
-
+    def get(self):
+        self.render("register.html")
 
 app = webapp2.WSGIApplication([
     ('/', MainHandler),
     ('/newpost', PostHandler),
     ('/register', Register),
     ('/login', Login),
-    ('/logout, Logout)
+    ('/logout', Logout)
 ], debug=True)
