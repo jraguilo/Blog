@@ -1,4 +1,9 @@
+import hashlib
+import hmac
+import random
+import re
 import os
+from string import letters
 
 import webapp2
 import jinja2
@@ -20,7 +25,36 @@ class BlogHandler(webapp2.RequestHandler):
 
     def render(self, template, **kw):
         self.write(self.render_str(template, **kw))
-        
+
+#validation functions
+USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
+def valid_username(username):
+    return username and USER_RE.match(username)
+    
+PASS_RE = re.compile(r"^.{1,20}$")
+def valid_password(password):
+    return password and PASS_RE.match(password)
+
+EMAIL_RE  = re.compile(r"^[\S]+@[\S]+\.[\S]+$")
+def valid_email(email):            
+    return email and EMAIL_RE.match(email)
+    
+#user functions
+#Note: Password hashing is self implemented for learning purposes only
+def make_salt():
+    return ''.join(random.choice(letters) for x in xrange(5))
+    
+def make_pw_hash(name, pw, salt = None):
+    if not salt:
+        salt = make_salt()
+    hash = hashlib.sha256(name + pw + salt).hexdigest()
+    return '%s,%s' % (salt, hash)
+
+def valid_pw(name, password, hash):
+    salt = hash.split(',')[0]
+    return hash == make_pw_hash(name, password, salt)
+
+
 #create database for blog posts        
 class Post(db.Model):
     subject = db.StringProperty(required = True)
@@ -35,10 +69,15 @@ class User(db.Model):
     
     @classmethod
     def by_name(cls, name):
-
+        u = User.all().filter('name =', name).get()
+        return u
     @classmethod
     def register(cls, name, password, email):
-
+        pw_hash = make_pw_hash(name, pw)
+        return User(name = name,
+                    pw_hash = pw_hash,
+                    email = email)
+        
 class MainHandler(BlogHandler):
     def get(self):
         posts = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
@@ -61,18 +100,6 @@ class PostHandler(BlogHandler):
             error = "Missing subject or content"
             self.render_front(subject, content, error)
 
-USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
-def valid_username(username):
-    return username and USER_RE.match(username)
-    
-PASS_RE = re.compile(r"^.{1,20}$")
-def valid_password(password):
-    return password and PASS_RE.match(password)
-
-EMAIL_RE  = re.compile(r"^[\S]+@[\S]+\.[\S]+$")
-def valid_email(email):            
-    return email and EMAIL_RE.match(email)
-
 class Register(BlogHandler):
     def get(self):
         self.render("register.html")
@@ -93,7 +120,7 @@ class Register(BlogHandler):
             error = True
             
         else:
-            #make sure the user does not alerady exist
+            #make sure the user does not already exist
             u = User.by_name(username)
             if u:
                 params['user_error'] = "That user already exists"
@@ -106,7 +133,6 @@ class Register(BlogHandler):
         if not valid_email(email):
             params['email_error'] = "That was not a valid email"
             error = True
-            
             
         if error:
             #render registration page with error messages
