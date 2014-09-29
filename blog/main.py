@@ -40,9 +40,9 @@ def make_pw_hash(name, pw, salt = None):
     hash = hashlib.sha256(name + pw + salt).hexdigest()
     return '%s,%s' % (salt, hash)
 
-def valid_pw(name, password, hash):
+def valid_pw(name, pw, hash):
     salt = hash.split(',')[0]
-    return hash == make_pw_hash(name, password, salt)
+    return hash == make_pw_hash(name, pw, salt)
     
 def make_secure_val(val):
     return '%s|%s' % (val, hmac.new(SECRET, val).hexdigest())
@@ -51,6 +51,12 @@ def check_secure_val(hash):
     val = hash.split('|')[0]
     if h == make_secure_val(val):
         return val
+
+def user_key(group = 'default'):
+    return db.Key.from_path('users', group)
+
+def blog_key(name = 'default'):
+    return db.Key.from_path('blogs', name)
         
 class BlogHandler(webapp2.RequestHandler):
     #For reference, *a is arguments, *kw is dictionary
@@ -79,12 +85,6 @@ class BlogHandler(webapp2.RequestHandler):
 
     def logout(self):
         self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
-        
-    def user_key(group = 'default'):
-        return db.Key.from_path('users', group)
-
-    def blog_key(name = 'default'):
-        return db.Key.from_path('blogs', name)
 
 #create database for blog posts        
 class Post(db.Model):
@@ -108,7 +108,7 @@ class User(db.Model):
         return u
         
     @classmethod
-    def register(cls, name, password, email):
+    def register(cls, name, pw, email):
         pw_hash = make_pw_hash(name, pw)
         return cls(parent = user_key(),
                     name = name,
@@ -182,7 +182,7 @@ class Register(BlogHandler):
             self.render("register.html", **params)
         else:
             #create user
-            u = User.register(self.username, self.password, self.email)
+            u = User.register(username, password, email)
             u.put()
             self.login(u)
             self.write('Welcome')
@@ -199,7 +199,7 @@ class Login(BlogHandler):
         u = User.authenticate_user(username, password)
         if u:
             self.login(u)
-            self.redirect('/blog')
+            self.write("login successful")
         else:
             msg = "Invalid Login"
             self.render("login.html", error = msg)
