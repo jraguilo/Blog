@@ -14,17 +14,7 @@ template_dir = os.path.join(os.path.dirname(__file__), 'templates')
 jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir),
                                autoescape = True)
                                
-class BlogHandler(webapp2.RequestHandler):
-    #For reference, *a is arguments, *kw is dictionary
-    def write(self, *a, **kw):
-        self.response.out.write(*a, **kw)
-
-    def render_str(self, template, **params):
-        t = jinja_env.get_template(template)
-        return t.render(params)
-
-    def render(self, template, **kw):
-        self.write(self.render_str(template, **kw))
+SECRET = '89uij7se'  
 
 #validation functions
 USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
@@ -53,7 +43,48 @@ def make_pw_hash(name, pw, salt = None):
 def valid_pw(name, password, hash):
     salt = hash.split(',')[0]
     return hash == make_pw_hash(name, password, salt)
+    
+def make_secure_val(val):
+    return '%s|%s' % (val, hmac.new(SECRET, val).hexdigest())
+    
+def check_secure_val(hash):
+    val = hash.split('|')[0]
+    if h == make_secure_val(val):
+        return val
+        
+class BlogHandler(webapp2.RequestHandler):
+    #For reference, *a is arguments, *kw is dictionary
+    def write(self, *a, **kw):
+        self.response.out.write(*a, **kw)
 
+    def render_str(self, template, **params):
+        t = jinja_env.get_template(template)
+        return t.render(params)
+
+    def render(self, template, **kw):
+        self.write(self.render_str(template, **kw))
+
+    def set_secure_cookie(self, name, val):
+        cookie_val = make_secure_val(val)
+        self.response.headers.add_header(
+            'Set-Cookie',
+            '%s=%s; Path=/' % (name, cookie_val))
+
+    def read_secure_cookie(self, name):
+        cookie_val = self.request.cookies.get(name)
+        return cookie_val and check_secure_val(cookie_val)
+
+    def login(self, user):
+        self.set_secure_cookie('user_id', str(user.key().id()))
+
+    def logout(self):
+        self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
+        
+    def user_key(group = 'default'):
+        return db.Key.from_path('users', group)
+
+    def blog_key(name = 'default'):
+        return db.Key.from_path('blogs', name)
 
 #create database for blog posts        
 class Post(db.Model):
@@ -65,18 +96,30 @@ class Post(db.Model):
 class User(db.Model):
     name = db.StringProperty(required = True)
     pw_hash = db.StringProperty(required = True)
-    email = db.StringProperty()
+    email = db.StringProperty(required = True)
+    
+    @classmethod
+    def by_id(cls, uid):
+        return cls.get_by_id(uid, parent = user_key())
     
     @classmethod
     def by_name(cls, name):
-        u = User.all().filter('name =', name).get()
+        u = cls.all().filter('name =', name).get()
         return u
+        
     @classmethod
     def register(cls, name, password, email):
         pw_hash = make_pw_hash(name, pw)
-        return User(name = name,
+        return cls(parent = user_key(),
+                    name = name,
                     pw_hash = pw_hash,
                     email = email)
+                    
+    @classmethod
+    def authenticate_user(cls, name, pw):
+        u = cls.by_name(name)
+        if u and valid_pw(name, pw, u.pw_hash):
+            return u
         
 class MainHandler(BlogHandler):
     def get(self):
@@ -141,10 +184,26 @@ class Register(BlogHandler):
             #create user
             u = User.register(self.username, self.password, self.email)
             u.put()
+            self.login(u)
+            self.write('Welcome')
             
 class Login(BlogHandler):
     def get(self):
-        self.render("register.html")
+        self.render("login.html")
+        
+    def post(self):
+        username = self.request.get("username")
+        password = self.request.get("password")
+        
+        #verify username and password
+        u = User.authenticate_user(username, password)
+        if u:
+            self.login(u)
+            self.redirect('/blog')
+        else:
+            msg = "Invalid Login"
+            self.render("login.html", error = msg)
+    
 class Logout(BlogHandler):
     def get(self):
         self.render("register.html")
