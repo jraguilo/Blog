@@ -1,15 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
+
   <div class="row">
     <div class="col-sm-8 blog-main">
-      {% for p in posts %}
         <div class="blog-post">
-          <h2 class="blog-post-title">{{p.subject}}</h2>
-          <p class="blog-post-meta">{{p.created.date()}}</p>
+          <h2 class="blog-post-title">{{post.subject}}</h2>
+          <p class="blog-post-meta">{{post.created.date()}}</p>
           
-          <p>{{p.content}}</p>
+          <p>{{post.content}}</p>
         </div><!-- /.blog-post -->
-      {% endfor %}
     </div><!-- /.blog-main -->
+
 {% endblock %}
+

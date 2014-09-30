@@ -132,16 +132,27 @@ class PostHandler(BlogHandler):
         
     def get(self):
         self.render_front()
+        
     def post(self):
         subject = self.request.get("subject")
         content = self.request.get("content")
         if subject and content:
-            p = Post(subject=subject, content=content)
+            p = Post(parent = blog_key(), subject=subject, content=content)
             p.put()
-            self.redirect("/")
+            self.redirect('/%s' % str(p.key().id()))
         else:
             error = "Missing subject or content"
             self.render_front(subject, content, error)
+            
+class PostPage(BlogHandler):
+    def get(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+
+        if not post:
+            self.write("fail")
+            return
+        self.render("permalink.html", post = post)
 
 class Register(BlogHandler):
     def get(self):
@@ -206,11 +217,14 @@ class Login(BlogHandler):
     
 class Logout(BlogHandler):
     def get(self):
-        self.render("register.html")
+        self.logout()
+        self.render("login.html")
+        
 
 app = webapp2.WSGIApplication([
     ('/', MainHandler),
     ('/newpost', PostHandler),
+    ('/([0-9]+)', PostPage),
     ('/register', Register),
     ('/login', Login),
     ('/logout', Logout)
