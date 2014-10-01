@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import random
 import re
 import os
@@ -69,6 +70,11 @@ class BlogHandler(webapp2.RequestHandler):
 
     def render(self, template, **kw):
         self.write(self.render_str(template, **kw))
+        
+    def render_json(self, d):
+        json_txt = json.dumps(d)
+        self.response.headers['Content-Type'] = 'application/json; charset=UTF-8'
+        self.write(json_txt)
 
     def set_secure_cookie(self, name, val):
         cookie_val = make_secure_val(val)
@@ -85,6 +91,17 @@ class BlogHandler(webapp2.RequestHandler):
 
     def logout(self):
         self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
+        
+        
+    def initialize(self, *a, **kw):
+        webapp2.RequestHandler.initialize(self, *a, **kw)
+        user_id = self.read_secure_cookie('user_id')
+        self.user = user_id and User.by_id(int(user_id))
+        
+        if self.request.url.endswith('.json'):
+            self.format = 'json'
+        else:
+            self.format = 'html'
 
 #create database for blog posts        
 class Post(db.Model):
@@ -92,6 +109,14 @@ class Post(db.Model):
     content = db.TextProperty(required = True)
     created = db.DateTimeProperty(auto_now_add = True)
     last_modified = db.DateTimeProperty(auto_now = True)
+    
+    def as_dict(self):
+        time_format = '%c'
+        post_dict = {'subject' : self.subject,
+                'content' : self.content,
+                'created' : self.created.strftime(time_format),
+                'last_modified' : self.last_modified.strftime(time_format)}
+        return post_dict
     
 class User(db.Model):
     name = db.StringProperty(required = True)
@@ -124,7 +149,14 @@ class User(db.Model):
 class MainHandler(BlogHandler):
     def get(self):
         posts = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
-        self.render("front.html", posts=posts)
+        if self.format == 'html':
+           self.render("front.html", posts=posts)
+        else:
+            post_list = []
+            for post in posts:
+                post_list.append(post.as_dict())
+            self.render_json(post_list)
+        
         
 class PostHandler(BlogHandler):
     def render_front(self, subject="", content="", error=""):
@@ -150,9 +182,12 @@ class PostPage(BlogHandler):
         post = db.get(key)
 
         if not post:
-            self.write("fail")
+            self.error(404)
             return
-        self.render("permalink.html", post = post)
+        if self.format == 'html':
+           self.render("permalink.html", post = post)
+        else:
+            self.render_json(post.as_dict())
 
 class Register(BlogHandler):
     def get(self):
@@ -222,9 +257,9 @@ class Logout(BlogHandler):
         
 
 app = webapp2.WSGIApplication([
-    ('/', MainHandler),
+    ('/?(?:\.json)?', MainHandler),
     ('/newpost', PostHandler),
-    ('/([0-9]+)', PostPage),
+    ('/([0-9]+)(?:\.json)?', PostPage),
     ('/register', Register),
     ('/login', Login),
     ('/logout', Logout)
