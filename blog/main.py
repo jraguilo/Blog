@@ -4,11 +4,13 @@ import json
 import random
 import re
 import os
+from datetime import datetime, timedelta
 from string import letters
 
 import webapp2
 import jinja2
 
+from google.appengine.api import memcache
 from google.appengine.ext import db
 
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -58,6 +60,35 @@ def user_key(group = 'default'):
 
 def blog_key(name = 'default'):
     return db.Key.from_path('blogs', name)
+    
+def post_cache(key, update = False):
+    posts = memcache.get(key)
+    if posts is None or update:
+        posts = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
+        posts = list(posts)
+        set_age(key, posts)
+    return posts
+    
+def set_age(key, val):
+    save_time = datetime.utcnow()
+    memcache.set(key, (val, save_time))
+    
+def get_age(key):
+    val_tuple = memcache.get(key)
+    if val_tuple:
+        val, save_time = val_tuple
+        age = (datetime.utcnow() - save_time).total_seconds()
+    else:
+        val, age = 0
+    return val, age
+    
+def age_str(age):
+    s = 'queried %s seconds ago'
+    age = int(age)
+    if age == 1:
+        s = s.replace('seconds', 'second')
+    return s % age
+        
         
 class BlogHandler(webapp2.RequestHandler):
     #For reference, *a is arguments, *kw is dictionary
@@ -91,7 +122,6 @@ class BlogHandler(webapp2.RequestHandler):
 
     def logout(self):
         self.response.headers.add_header('Set-Cookie', 'user_id=; Path=/')
-        
         
     def initialize(self, *a, **kw):
         webapp2.RequestHandler.initialize(self, *a, **kw)
@@ -145,19 +175,21 @@ class User(db.Model):
         u = cls.by_name(name)
         if u and valid_pw(name, pw, u.pw_hash):
             return u
-        
+            
+#Handler for front page
 class MainHandler(BlogHandler):
     def get(self):
-        posts = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
+        posts = post_cache('front')
         if self.format == 'html':
-           self.render("front.html", posts=posts)
+            age = get_age('front')
+            self.render("front.html", posts=posts, age = age)
         else:
             post_list = []
             for post in posts:
                 post_list.append(post.as_dict())
             self.render_json(post_list)
         
-        
+#Handler for creating new blog posts
 class PostHandler(BlogHandler):
     def render_front(self, subject="", content="", error=""):
         self.render("newpost.html", subject=subject, content=content, error=error)
@@ -171,21 +203,25 @@ class PostHandler(BlogHandler):
         if subject and content:
             p = Post(parent = blog_key(), subject=subject, content=content)
             p.put()
+            post_cache('front', True)
+            post_cache(str(p.key().id()), True)
             self.redirect('/%s' % str(p.key().id()))
         else:
             error = "Missing subject or content"
             self.render_front(subject, content, error)
-            
+
+#Handler for displaying individual blog posts            
 class PostPage(BlogHandler):
     def get(self, post_id):
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
+        post = post_cache(str(key))
 
         if not post:
             self.error(404)
             return
         if self.format == 'html':
-           self.render("permalink.html", post = post)
+            age = get_age('blog')
+            self.render("permalink.html", post = post, age = age)
         else:
             self.render_json(post.as_dict())
 
