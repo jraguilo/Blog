@@ -62,12 +62,21 @@ def blog_key(name = 'default'):
     return db.Key.from_path('blogs', name)
     
 def post_cache(key, update = False):
-    posts = memcache.get(key)
-    if posts is None or update:
-        posts = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
-        posts = list(posts)
-        set_age(key, posts)
-    return posts
+    post_tuple = get_age(key)
+    if post_tuple is None or update:
+        if key == 'front':
+            val = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
+            val = list(val)
+            set_age(key, val)
+            post_tuple = get_age(key)
+        elif key.isdigit():
+            val = db.get(key)
+            set_age(key, val)
+            post_tuple = get_age(key)
+        else:
+            self.error("invalid key")
+            return None, 0
+    return post_tuple
     
 def set_age(key, val):
     save_time = datetime.utcnow()
@@ -79,7 +88,7 @@ def get_age(key):
         val, save_time = val_tuple
         age = (datetime.utcnow() - save_time).total_seconds()
     else:
-        val, age = 0
+        val, age = None, 0
     return val, age
     
 def age_str(age):
@@ -179,9 +188,10 @@ class User(db.Model):
 #Handler for front page
 class MainHandler(BlogHandler):
     def get(self):
-        posts = post_cache('front')
+        post_tuple = post_cache('front')
+        posts, age = post_tuple
         if self.format == 'html':
-            age = get_age('front')
+            age = age_str(age)
             self.render("front.html", posts=posts, age = age)
         else:
             post_list = []
@@ -213,14 +223,12 @@ class PostHandler(BlogHandler):
 #Handler for displaying individual blog posts            
 class PostPage(BlogHandler):
     def get(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = post_cache(str(key))
-
+        post_tuple = post_cache(post_id)
+        post, age = post_tuple
         if not post:
             self.error(404)
             return
         if self.format == 'html':
-            age = get_age('blog')
             self.render("permalink.html", post = post, age = age)
         else:
             self.render_json(post.as_dict())
