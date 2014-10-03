@@ -52,7 +52,7 @@ def make_secure_val(val):
     
 def check_secure_val(hash):
     val = hash.split('|')[0]
-    if h == make_secure_val(val):
+    if hash == make_secure_val(val):
         return val
 
 def user_key(group = 'default'):
@@ -64,18 +64,10 @@ def blog_key(name = 'default'):
 def post_cache(key, update = False):
     post_tuple = get_age(key)
     if post_tuple is None or update:
-        if key == 'front':
-            val = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
-            val = list(val)
-            set_age(key, val)
-            post_tuple = get_age(key)
-        elif key.isdigit():
-            val = db.get(key)
-            set_age(key, val)
-            post_tuple = get_age(key)
-        else:
-            self.error("invalid key")
-            return None, 0
+        val = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
+        val = list(val)
+        set_age(key, val)
+        post_tuple = get_age(key)
     return post_tuple
     
 def set_age(key, val):
@@ -191,8 +183,7 @@ class MainHandler(BlogHandler):
         post_tuple = post_cache('front')
         posts, age = post_tuple
         if self.format == 'html':
-            age = age_str(age)
-            self.render("front.html", posts=posts, age = age)
+            self.render("front.html", posts=posts, age = age_str(age))
         else:
             post_list = []
             for post in posts:
@@ -214,7 +205,8 @@ class PostHandler(BlogHandler):
             p = Post(parent = blog_key(), subject=subject, content=content)
             p.put()
             post_cache('front', True)
-            post_cache(str(p.key().id()), True)
+            print str(p.key())
+            post_cache(str(p.key()), True)
             self.redirect('/%s' % str(p.key().id()))
         else:
             error = "Missing subject or content"
@@ -223,13 +215,18 @@ class PostHandler(BlogHandler):
 #Handler for displaying individual blog posts            
 class PostPage(BlogHandler):
     def get(self, post_id):
-        post_tuple = post_cache(post_id)
-        post, age = post_tuple
+        post, age = get_age(post_id)
+        if not post:
+            key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+            post = db.get(key)
+            set_age(post_id, post)
+            age = 0
         if not post:
             self.error(404)
             return
+            
         if self.format == 'html':
-            self.render("permalink.html", post = post, age = age)
+            self.render("permalink.html", post = post, age = age_str(age))
         else:
             self.render_json(post.as_dict())
 
@@ -275,7 +272,7 @@ class Register(BlogHandler):
             u = User.register(username, password, email)
             u.put()
             self.login(u)
-            self.write('Welcome')
+            self.redirect('/welcome?username=' + username)
             
 class Login(BlogHandler):
     def get(self):
@@ -299,12 +296,18 @@ class Logout(BlogHandler):
         self.logout()
         self.render("login.html")
         
+class WelcomePage(BlogHandler):
+    def get(self):
+        username = self.request.get('username')
+        self.write("Welcome %s" % username)
+        
 
 app = webapp2.WSGIApplication([
     ('/?(?:\.json)?', MainHandler),
     ('/newpost', PostHandler),
     ('/([0-9]+)(?:\.json)?', PostPage),
-    ('/register', Register),
+    ('/signup', Register),
     ('/login', Login),
-    ('/logout', Logout)
+    ('/logout', Logout),
+    ('/welcome', WelcomePage)
 ], debug=True)
