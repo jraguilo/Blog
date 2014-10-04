@@ -299,7 +299,7 @@ class Logout(BlogHandler):
 class WelcomePage(BlogHandler):
     def get(self):
         username = self.request.get('username')
-        self.write("Welcome %s" % username)
+        self.render("welcome.html", username = username)
         
 
 app = webapp2.WSGIApplication([
