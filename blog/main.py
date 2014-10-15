@@ -63,7 +63,8 @@ def blog_key(name = 'default'):
     
 def post_cache(key, update = False):
     post_tuple = get_age(key)
-    if post_tuple is None or update:
+    val, age = post_tuple
+    if not val or update:
         val = db.GqlQuery("SELECT * FROM Post ORDER BY last_modified DESC")
         val = list(val)
         set_age(key, val)
@@ -183,7 +184,7 @@ class MainHandler(BlogHandler):
         post_tuple = post_cache('front')
         posts, age = post_tuple
         if self.format == 'html':
-            self.render("front.html", posts=posts)
+            self.render("front.html", posts=posts, age=age_str(age))
         else:
             post_list = []
             for post in posts:
@@ -293,6 +294,11 @@ class Logout(BlogHandler):
         self.logout()
         self.render("login.html")
         
+class FlushCache(BlogHandler):
+    def get(self):
+        memcache.flush_all()
+        self.redirect('/')
+        
 class WelcomePage(BlogHandler):
     def get(self):
         username = self.request.get('username')
@@ -306,5 +312,6 @@ app = webapp2.WSGIApplication([
     ('/signup', Register),
     ('/login', Login),
     ('/logout', Logout),
+    ('/flush', FlushCache),
     ('/welcome', WelcomePage)
 ], debug=True)
