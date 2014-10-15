@@ -152,7 +152,7 @@ class Post(db.Model):
 class User(db.Model):
     name = db.StringProperty(required = True)
     pw_hash = db.StringProperty(required = True)
-    email = db.StringProperty(required = True)
+    email = db.StringProperty(required = False)
     
     @classmethod
     def by_id(cls, uid):
@@ -183,7 +183,7 @@ class MainHandler(BlogHandler):
         post_tuple = post_cache('front')
         posts, age = post_tuple
         if self.format == 'html':
-            self.render("front.html", posts=posts, age = age_str(age))
+            self.render("front.html", posts=posts)
         else:
             post_list = []
             for post in posts:
@@ -260,9 +260,6 @@ class Register(BlogHandler):
             error = True
         elif password != verify:
             params['verify_error'] = "Your passwords did not match"
-        if not valid_email(email):
-            params['email_error'] = "That was not a valid email"
-            error = True
             
         if error:
             #render registration page with error messages
